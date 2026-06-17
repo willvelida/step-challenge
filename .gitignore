@@ -427,3 +427,43 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# ---- StepUp project-specific ----
+
+# Environment & secrets (connection strings, webhook URLs)
+.env
+.env.*
+!.env.example
+*.local
+
+# Local Postgres data / dumps (never commit DB volumes or backups)
+data/pgdata/
+*.dump
+*.sql.bak
+
+# Dapr local runtime
+.dapr/
+
+# Kubernetes / local cluster kubeconfigs
+kubeconfig
+*.kubeconfig
+
+# Bicep / Azure deployment artifacts
+*.azure/
+.bicep/
+
+# Python (if simulator/services use it)
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / TypeScript (if services use it)
+dist/
+*.tsbuildinfo
+
+# OS noise
+.DS_Store
+Thumbs.db
