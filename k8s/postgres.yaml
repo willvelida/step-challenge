@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        args: ["-c","wal_level=logical","-c","max_replication_slots=10","-c","max_wal_senders=10"]
+        env:
+          - { name: POSTGRES_PASSWORD, value: postgres }
+          - { name: POSTGRES_DB, value: stepup }
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+        ports:
+          - containerPort: 5432
+        volumeMounts:
+          - { name: initdb, mountPath: /docker-entrypoint-initdb.d }
+      volumes:
+        - name: initdb
+          configMap: { name: stepup-initdb }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+ 
