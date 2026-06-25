@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ContinuousQuery
+name: new-leader
+spec:
+  mode: query
+  sources:
+    subscriptions:
+      - id: stepup
+        nodes:
+          - sourceLabel: participants
+          - sourceLabel: step_logs
+    joins:
+      - id: HAS_LOG
+        keys:
+          - label: participants
+            property: id
+          - label: step_logs
+            property: participant_id
+  query: >
+    MATCH
+      (p:participants)-[:HAS_LOG]->(s:step_logs)
+    WITH
+      p, sum(s.steps) AS total
+    RETURN
+      p.id AS id,
+      p.name AS name,
+      total
