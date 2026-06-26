@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS participants (
     name TEXT NOT NULL,
     team TEXT,
     target INTEGER NOT NULL,
+    challenge BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
