@@ -1,0 +1,16 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: discord
+spec:
+  type: bindings.http
+  version: v1
+  metadata:
+    - name: url
+      secretKeyRef:
+        name: discordWebhookUrl
+        key: discordWebhookUrl
+auth:
+  secretStore: local-secrets
+scopes:
+  - notifier

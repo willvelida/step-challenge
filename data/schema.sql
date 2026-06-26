@@ -32,4 +32,12 @@ CREATE TABLE IF NOT EXISTS challenge_state (
     cumulative_target INTEGER NOT NULL
 );
 
+-- REPLICA IDENTITY FULL makes Postgres include every column (not just the
+-- primary key) in the logical-replication record for UPDATEs and DELETEs.
+-- Drasi/Debezium requires non-null values for NOT NULL columns (e.g.
+-- step_logs.log_date) on DELETE; without FULL, a delete sends nulls and the
+-- source connector crashes. Every table the Drasi source reads needs this.
+ALTER TABLE participants REPLICA IDENTITY FULL;
+ALTER TABLE step_logs REPLICA IDENTITY FULL;
+ALTER TABLE daily_targets REPLICA IDENTITY FULL;
 ALTER TABLE challenge_state REPLICA IDENTITY FULL;

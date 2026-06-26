@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Reaction
+name: notifier
+spec:
+  kind: PostDaprPubSub
+  queries:
+    race-to-goal: >
+      { "pubsubName": "stepup-pubsub", "topicName": "stepup-events", "format": "Unpacked", "skipControlSignals": true }
+    new-leader: >
+      { "pubsubName": "stepup-pubsub", "topicName": "stepup-events", "format": "Unpacked", "skipControlSignals": true }
+    behind-pace: >
+      { "pubsubName": "stepup-pubsub", "topicName": "stepup-events", "format": "Unpacked", "skipControlSignals": true }
+    daily-smashed: >
+      { "pubsubName": "stepup-pubsub", "topicName": "stepup-events", "format": "Unpacked", "skipControlSignals": true }

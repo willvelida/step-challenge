@@ -467,3 +467,5 @@ dist/
 # OS noise
 .DS_Store
 Thumbs.db
+
+src/Notifier/secrets.json
