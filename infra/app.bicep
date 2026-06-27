@@ -10,6 +10,9 @@ param environment string
 @description('Image tag for the StepUp service images (built + kind-loaded locally).')
 param imageTag string = 'local'
 
+@description('Registry/prefix for the service images. Local default "stepup"; for ACR set your login server, e.g. "myregistry.azurecr.io".')
+param imageRegistry string = 'stepup'
+
 // The Radius application. Containers (added next) will reference app.id.
 resource app 'Applications.Core/applications@2023-10-01-preview' = {
   name: 'stepup'
@@ -223,7 +226,7 @@ resource simulator 'Applications.Core/containers@2023-10-01-preview' = {
   properties: {
     application: app.id
     container: {
-      image: 'stepup/simulator:${imageTag}'
+      image: '${imageRegistry}/simulator:${imageTag}'
       imagePullPolicy: 'IfNotPresent'
       env: {
         PG_DSN: {
@@ -320,7 +323,7 @@ resource notifier 'Applications.Core/containers@2023-10-01-preview' = {
   properties: {
     application: app.id
     container: {
-      image: 'stepup/notifier:${imageTag}'
+      image: '${imageRegistry}/notifier:${imageTag}'
       imagePullPolicy: 'IfNotPresent'
     }
     extensions: [
@@ -342,7 +345,7 @@ resource clock 'Applications.Core/containers@2023-10-01-preview' = {
   properties: {
     application: app.id
     container: {
-      image: 'stepup/clock:${imageTag}'
+      image: '${imageRegistry}/clock:${imageTag}'
       imagePullPolicy: 'IfNotPresent'
       env: {
         PG_DSN: {
@@ -387,7 +390,7 @@ resource dashboard 'Applications.Core/containers@2023-10-01-preview' = {
   properties: {
     application: app.id
     container: {
-      image: 'stepup/dashboard:${imageTag}'
+      image: '${imageRegistry}/dashboard:${imageTag}'
       imagePullPolicy: 'IfNotPresent'
       ports: {
         web: {
