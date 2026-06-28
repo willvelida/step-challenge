@@ -1,0 +1,102 @@
+name: CD
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RG: ${{ vars.APP_RG }}
+  AKS: ${{ vars.AKS_NAME }}
+  ACR: ${{ vars.ACR_NAME }}
+
+jobs:
+  deploy:
+    name: Build, push, and deploy to AKS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify required secret
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::error::DISCORD_WEBHOOK_URL secret not set. Run: gh secret set DISCORD_WEBHOOK_URL"
+            exit 1
+          fi
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install rad + drasi CLIs
+        run: |
+          wget -q "https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh" -O - | /bin/bash
+          curl -fsSL https://raw.githubusercontent.com/drasi-project/drasi-platform/main/cli/installers/install-drasi-cli.sh | /bin/bash
+
+      - name: Start AKS + fetch credentials
+        run: |
+          if [ "$(az aks show -g "$RG" -n "$AKS" --query powerState.code -o tsv)" != "Running" ]; then
+            az aks start -g "$RG" -n "$AKS"
+          fi
+          az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
+
+      - name: Build + push images to ACR (tagged by SHA)
+        run: |
+          TAG=$(git rev-parse --short HEAD)
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          for svc in Simulator Clock Notifier Dashboard; do
+            name=$(echo "$svc" | tr '[:upper:]' '[:lower:]')
+            az acr build -r "$ACR" -t "$name:$TAG" --platform linux/amd64 "src/$svc"
+          done
+
+      - name: Ensure Dapr + Drasi + Radius
+        run: |
+          drasi env kube
+          kubectl get namespace drasi-system >/dev/null 2>&1 || drasi init
+          rad install kubernetes      # idempotent; (re)ensures the default group + environment
+
+      - name: Shared Redis + pub/sub
+        run: |
+          kubectl apply -f k8s/redis.yaml
+          kubectl apply -f k8s/pubsub.yaml
+          kubectl wait --for=condition=ready pod -l app=redis --timeout=120s
+
+      - name: Webhook secret (before deploy — notifier needs it at startup)
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          kubectl create namespace default-stepup --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic notifier-webhook -n default-stepup \
+            --from-literal=url="$DISCORD_WEBHOOK_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Deploy StepUp via Radius
+        run: |
+          rad deploy infra/app.bicep \
+            --parameters imageRegistry="$ACR.azurecr.io" \
+            --parameters imageTag="$TAG"
+          kubectl wait --for=condition=ready pod -l app=postgres -n default --timeout=180s
+
+      - name: Restart Dapr services so sidecars load components
+        run: |
+          for d in simulator clock notifier; do kubectl rollout restart "deploy/$d" -n default-stepup; done
+          for d in simulator clock notifier; do kubectl rollout status  "deploy/$d" -n default-stepup --timeout=180s; done
+
+      - name: Apply Drasi source → queries → reactions
+        run: |
+          drasi apply -f drasi/source.yaml
+          drasi wait  -f drasi/source.yaml -t 180
+          for q in behind-pace collective-progress daily-smashed new-leader race-to-goal; do
+            drasi apply -f "drasi/$q.yaml"
+          done
+          for r in debug notifier-reaction dashboard-reaction; do
+            drasi apply -f "drasi/$r.yaml"
+          done

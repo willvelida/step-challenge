@@ -1,0 +1,46 @@
+name: Infra
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra/**.bicep'
+      - 'infra/**.bicepparam'
+
+permissions:
+  id-token: write   # OIDC token for azure/login
+  contents: read
+
+jobs:
+  deploy-infra:
+    name: Provision AKS + ACR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy RG + ACR + AKS
+        run: |
+          az deployment sub create \
+            -n stepup-infra \
+            -l ${{ vars.LOCATION }} \
+            --parameters infra/main.bicepparam
+
+      - name: Grant the OIDC identity AcrPush + AKS admin
+        # consumes the subscription UAA grant; this is what unblocks CD's image push
+        run: |
+          az deployment group create \
+            -g ${{ vars.APP_RG }} \
+            -n github-oidc-roles \
+            --template-file infra/github-oidc-roles.bicep \
+            --parameters identityName=${{ vars.IDENTITY_NAME }} \
+                         identityRgName=${{ vars.IDENTITY_RG }} \
+                         acrName=${{ vars.ACR_NAME }} \
+                         aksName=${{ vars.AKS_NAME }}

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read   # no id-token — CI needs no Azure access
+
+jobs:
+  build-images:
+    name: Build ${{ matrix.name }} image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # report every service, not just the first failure
+      matrix:
+        include:
+          - { dir: Simulator, name: simulator }
+          - { dir: Clock,     name: clock }
+          - { dir: Notifier,  name: notifier }
+          - { dir: Dashboard, name: dashboard }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image (no push)
+        # multi-stage build = restore + compile (.NET) / npm build (Vue); never pushed
+        run: docker build -t stepup/${{ matrix.name }}:ci "src/${{ matrix.dir }}"
+
+  lint-bicep:
+    name: Lint Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Azure templates
+        run: |
+          az bicep build --file infra/main.bicep
+          az bicep build --file infra/github-oidc.bicep
+          az bicep build --file infra/github-oidc-roles.bicep
+      - name: Compile the Radius app template
+        # restores the Radius extension types from the public registry; warnings
+        # (BCP081 dapr.io, BCP036 targetPort) are expected and non-fatal
+        run: az bicep build --file infra/app.bicep
