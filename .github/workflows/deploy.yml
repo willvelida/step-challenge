@@ -1,4 +1,4 @@
-name: CD
+name: Deploy
 
 on:
   push:
@@ -15,8 +15,33 @@ env:
   ACR: ${{ vars.ACR_NAME }}
 
 jobs:
+  infra:
+    name: Provision AKS + ACR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy RG + ACR + AKS
+        run: |
+          az deployment sub create -n stepup-infra -l ${{ vars.LOCATION }} \
+            --parameters infra/main.bicepparam
+      - name: Grant the OIDC identity AcrPush + AKS admin
+        run: |
+          az deployment group create -g "$RG" -n github-oidc-roles \
+            --template-file infra/github-oidc-roles.bicep \
+            --parameters identityName=${{ vars.IDENTITY_NAME }} \
+                         identityRgName=${{ vars.IDENTITY_RG }} \
+                         acrName=${{ vars.ACR_NAME }} \
+                         aksName=${{ vars.AKS_NAME }}
+
   deploy:
     name: Build, push, and deploy to AKS
+    needs: infra          # <-- runs only if infra succeeded
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +87,7 @@ jobs:
         run: |
           drasi env kube
           kubectl get namespace drasi-system >/dev/null 2>&1 || drasi init
-          rad install kubernetes      # idempotent; (re)ensures the default group + environment
+          rad install kubernetes
 
       - name: Shared Redis + pub/sub
         run: |
@@ -78,6 +103,7 @@ jobs:
           kubectl create secret generic notifier-webhook -n default-stepup \
             --from-literal=url="$DISCORD_WEBHOOK_URL" \
             --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy StepUp via Radius
         run: |
           rad deploy infra/app.bicep \

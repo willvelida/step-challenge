@@ -28,7 +28,7 @@ az deployment sub create -n github-oidc -l "$LOCATION" \
 read -r CLIENT_ID TENANT_ID SUB_ID IDENTITY_NAME IDENTITY_RG < <(
   az deployment sub show -n github-oidc --query \
     "[[properties.outputs.clientId.value, properties.outputs.tenantId.value, properties.outputs.subscriptionId.value, properties.outputs.identityName.value, properties.outputs.identityRgName.value]]" \
-    -o tsv)
+    -o tsv | tr -d '\r')
 
 echo "Setting GitHub repo variables..."
 gh variable set AZURE_CLIENT_ID       --body "$CLIENT_ID"
