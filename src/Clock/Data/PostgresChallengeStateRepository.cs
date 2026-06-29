@@ -16,6 +16,8 @@ public sealed class PostgresChallengeStateRepository(NpgsqlDataSource dataSource
             SET today = EXCLUDED.today, day_number = EXCLUDED.day_number,
                 daily_target = EXCLUDED.daily_target,
                 cumulative_target = EXCLUDED.cumulative_target;
+        UPDATE contest_state SET status = 'finished'
+            WHERE id AND (SELECT day_number FROM challenge_state) >= (SELECT max(day_number) FROM daily_targets);
         """;
 
     private const string SetByDateSql = """
