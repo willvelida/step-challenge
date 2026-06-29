@@ -1,14 +1,3 @@
-INSERT INTO participants (id, name, team, target) VALUES
-    ('alice', 'Alice', 'Sharks', 300000),
-    ('bob', 'Bob', 'Sharks', 300000),
-    ('chloe', 'Chloe', 'Eagles', 300000),
-    ('dave', 'Dave', 'Eagles', 300000),
-    ('erin', 'Erin', 'Wolves', 300000),
-    ('finn', 'Finn', 'Wolves', 300000)
-ON CONFLICT (id) DO UPDATE 
-    SET name = EXCLUDED.name, team = EXCLUDED.team, target = EXCLUDED.target;
-
-
 INSERT INTO daily_targets (day_number, date, daily_target, cumulative_target)
 SELECT
     d AS day_number,
@@ -30,3 +19,6 @@ ON CONFLICT (id) DO UPDATE
         day_number = EXCLUDED.day_number,
         daily_target = EXCLUDED.daily_target,
         cumulative_target = EXCLUDED.cumulative_target;
+
+INSERT INTO contest_state (id, participant_count, status, started_at)
+VALUE (TRUE, 0, 'idle', NULL) ON CONFLICT (id) DO NOTHING;

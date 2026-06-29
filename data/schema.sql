@@ -32,6 +32,13 @@ CREATE TABLE IF NOT EXISTS challenge_state (
     cumulative_target INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS contest_state (
+    id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+    participant_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'finished')),
+    started_at TIMESTAMPTZ
+);
+
 -- REPLICA IDENTITY FULL makes Postgres include every column (not just the
 -- primary key) in the logical-replication record for UPDATEs and DELETEs.
 -- Drasi/Debezium requires non-null values for NOT NULL columns (e.g.
@@ -41,3 +48,4 @@ ALTER TABLE participants REPLICA IDENTITY FULL;
 ALTER TABLE step_logs REPLICA IDENTITY FULL;
 ALTER TABLE daily_targets REPLICA IDENTITY FULL;
 ALTER TABLE challenge_state REPLICA IDENTITY FULL;
+ALTER TABLE contest_state REPLICA IDENTITY FULL;

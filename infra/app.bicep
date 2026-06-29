@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS challenge_state (
     cumulative_target INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS contest_state (
+    id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+    participant_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'finished')),
+    started_at TIMESTAMPTZ
+);
+
 -- REPLICA IDENTITY FULL makes Postgres include every column (not just the
 -- primary key) in the logical-replication record for UPDATEs and DELETEs.
 -- Drasi/Debezium requires non-null values for NOT NULL columns (e.g.
@@ -80,19 +87,9 @@ ALTER TABLE participants REPLICA IDENTITY FULL;
 ALTER TABLE step_logs REPLICA IDENTITY FULL;
 ALTER TABLE daily_targets REPLICA IDENTITY FULL;
 ALTER TABLE challenge_state REPLICA IDENTITY FULL;
+ALTER TABLE contest_state REPLICA IDENTITY FULL;
 '''
     '02-seed.sql': '''
-INSERT INTO participants (id, name, team, target) VALUES
-    ('alice', 'Alice', 'Sharks', 300000),
-    ('bob', 'Bob', 'Sharks', 300000),
-    ('chloe', 'Chloe', 'Eagles', 300000),
-    ('dave', 'Dave', 'Eagles', 300000),
-    ('erin', 'Erin', 'Wolves', 300000),
-    ('finn', 'Finn', 'Wolves', 300000)
-ON CONFLICT (id) DO UPDATE
-    SET name = EXCLUDED.name, team = EXCLUDED.team, target = EXCLUDED.target;
-
-
 INSERT INTO daily_targets (day_number, date, daily_target, cumulative_target)
 SELECT
     d AS day_number,
@@ -114,6 +111,9 @@ ON CONFLICT (id) DO UPDATE
         day_number = EXCLUDED.day_number,
         daily_target = EXCLUDED.daily_target,
         cumulative_target = EXCLUDED.cumulative_target;
+
+INSERT INTO contest_state (id, participant_count, status, started_at)
+VALUE (TRUE, 0, 'idle', NULL) ON CONFLICT (id) DO NOTHING;
 '''
     '03-drasi.sql': '''
 CREATE ROLE drasi WITH REPLICATION LOGIN SUPERUSER PASSWORD 'drasi';
