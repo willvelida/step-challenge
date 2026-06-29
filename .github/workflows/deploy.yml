@@ -120,17 +120,16 @@ jobs:
 
       - name: Apply Drasi source → queries → reactions
         run: |
-            drasi apply -f drasi/source.yaml
-            drasi wait  -f drasi/source.yaml -t 180
-            # cold-started cluster: bounce the view-svc sidecar race before queries
-            kubectl delete pod -n drasi-system $(kubectl get pods -n drasi-system -o name | grep view-svc) --ignore-not-found
-            kubectl wait --for=condition=ready pod -n drasi-system -l drasi/type=querycontainer --timeout=240s || true
-            # queries: delete-then-apply — Drasi can't update a ContinuousQuery in place, so re-apply 500s
-            for q in behind-pace collective-progress daily-smashed new-leader race-to-goal; do
-                drasi delete query "$q" 2>/dev/null || true
-                drasi apply -f "drasi/$q.yaml"
-            done
-            # reactions re-apply cleanly, no delete needed
-            for r in debug notifier-reaction dashboard-reaction; do
-                drasi apply -f "drasi/$r.yaml"
-            done
+          drasi apply -f drasi/source.yaml
+          drasi wait  -f drasi/source.yaml -t 180
+          # cold-started cluster: bounce the view-svc sidecar race before queries
+          view=$(kubectl get pods -n drasi-system -o name | grep view-svc || true)
+          [ -n "$view" ] && kubectl delete -n drasi-system "$view"
+          kubectl wait --for=condition=ready pod -n drasi-system -l drasi/type=querycontainer --timeout=240s || true
+          for q in behind-pace collective-progress daily-smashed new-leader race-to-goal; do
+            drasi delete query "$q" 2>/dev/null || true
+            drasi apply -f "drasi/$q.yaml"
+          done
+          for r in debug notifier-reaction dashboard-reaction; do
+            drasi apply -f "drasi/$r.yaml"
+          done
