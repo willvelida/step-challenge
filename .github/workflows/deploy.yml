@@ -122,10 +122,10 @@ jobs:
         run: |
           drasi apply -f drasi/source.yaml
           drasi wait  -f drasi/source.yaml -t 180
-          # cold-started cluster: bounce the view-svc sidecar race before queries
+          # bounce the cold-start view-svc, then gate on the query container being truly online
           view=$(kubectl get pods -n drasi-system -o name | grep view-svc || true)
           [ -n "$view" ] && kubectl delete -n drasi-system "$view"
-          kubectl wait --for=condition=ready pod -n drasi-system -l drasi/type=querycontainer --timeout=240s || true
+          drasi wait querycontainer default -t 240
           for q in behind-pace collective-progress daily-smashed new-leader race-to-goal; do
             drasi delete query "$q" 2>/dev/null || true
             drasi apply -f "drasi/$q.yaml"
