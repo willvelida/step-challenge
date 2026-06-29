@@ -113,7 +113,7 @@ ON CONFLICT (id) DO UPDATE
         cumulative_target = EXCLUDED.cumulative_target;
 
 INSERT INTO contest_state (id, participant_count, status, started_at)
-VALUE (TRUE, 0, 'idle', NULL) ON CONFLICT (id) DO NOTHING;
+VALUES (TRUE, 0, 'idle', NULL) ON CONFLICT (id) DO NOTHING;
 '''
     '03-drasi.sql': '''
 CREATE ROLE drasi WITH REPLICATION LOGIN SUPERUSER PASSWORD 'drasi';
