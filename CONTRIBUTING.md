@@ -2,7 +2,7 @@
 
 Thanks for your interest! StepUp is a sample app demonstrating Dapr, Radius, and Drasi, so
 contributions that make it clearer, more correct, or easier to run are especially welcome —
-bug fixes, new contest queries, documentation, or deployment improvements.
+bug fixes, documentation, or deployment improvements.
 
 ## Getting started
 
@@ -38,12 +38,6 @@ with a type:
 | `scripts/` | local (`cluster-*`, `db-*`) and Azure (`aks-*`, `setup-oidc`) lifecycle scripts |
 | `docs/` | architecture notes and per-feature implementation plans |
 | `.github/workflows/` | the CI and Deploy pipelines |
-
-## Working style
-
-Larger changes start with a short plan in `docs/` (see `docs/refactor.md` and
-`docs/delete-feature.md`) broken into small, independently shippable PRs. Please follow that
-pattern for non-trivial work.
 
 ## License
 

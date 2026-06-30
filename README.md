@@ -201,7 +201,7 @@ az aks stop -g stepup-rg -n stepup-aks        # or ./scripts/aks-down.sh
 
 ## Contributing
 
-Contributions are welcome — bug fixes, new contests, documentation, or deployment
+Contributions are welcome — bug fixes, documentation, or deployment
 improvements. Fork the repo, branch off `main`, and open a pull request; CI (image build +
 Bicep lint) must pass before merge. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
 workflow, commit conventions, and a map of where things live.
