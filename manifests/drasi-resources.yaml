@@ -1,0 +1,691 @@
+kind: QueryContainer
+apiVersion: v1
+name: default
+spec:
+    defaultStore: redis
+    queryHostCount: 1
+    results:
+        MONGO_RESULT_STORE_COLL_NAME: Results
+        MONGO_RESULT_STORE_DB_NAME: Drasi
+        MONGO_URI: mongodb://drasi-mongo:27017
+    storage:
+        memory:
+            enableArchive: false
+            kind: memory
+        redis:
+            connectionString: redis://drasi-redis:6379
+            kind: redis
+tag: ""
+---
+kind: SourceProvider
+apiVersion: v1
+name: PostgreSQL
+spec:
+    config_schema:
+        properties:
+            database:
+                type: string
+            host:
+                type: string
+            password:
+                type: string
+            port:
+                type: number
+            ssl:
+                default: false
+                type: boolean
+            tables:
+                type: array
+            user:
+                type: string
+        required:
+            - database
+            - host
+            - port
+            - tables
+        type: object
+    services:
+        proxy:
+            config_schema:
+                properties:
+                    connector:
+                        default: PostgreSQL
+                        type: string
+                type: object
+            dapr:
+                app-port: "4002"
+            image: source-sql-proxy
+        reactivator:
+            config_schema:
+                properties:
+                    connector:
+                        default: PostgreSQL
+                        type: string
+                type: object
+            dapr:
+                app-port: "80"
+            deprovisionHandler: true
+            image: source-debezium-reactivator
+tag: ""
+---
+kind: SourceProvider
+apiVersion: v1
+name: MySQL
+spec:
+    config_schema:
+        properties:
+            database:
+                type: string
+            host:
+                type: string
+            password:
+                type: string
+            port:
+                type: number
+            ssl:
+                default: false
+                type: boolean
+            tables:
+                type: array
+            user:
+                type: string
+        required:
+            - database
+            - host
+            - port
+            - password
+            - user
+            - tables
+        type: object
+    services:
+        proxy:
+            config_schema:
+                properties:
+                    connector:
+                        default: MySQL
+                        type: string
+                type: object
+            dapr:
+                app-port: "4002"
+            image: source-sql-proxy
+        reactivator:
+            config_schema:
+                properties:
+                    connector:
+                        default: MySQL
+                        type: string
+                type: object
+            dapr:
+                app-port: "80"
+            deprovisionHandler: true
+            image: source-debezium-reactivator
+tag: ""
+---
+kind: SourceProvider
+apiVersion: v1
+name: SQLServer
+spec:
+    config_schema:
+        properties:
+            database:
+                type: string
+            encrypt:
+                default: false
+                type: boolean
+            host:
+                type: string
+            password:
+                type: string
+            port:
+                type: number
+            tables:
+                type: array
+            trustServerCertificate:
+                default: false
+                type: boolean
+            user:
+                type: string
+        required:
+            - database
+            - host
+            - port
+            - tables
+        type: object
+    services:
+        proxy:
+            config_schema:
+                properties:
+                    connector:
+                        default: SQLServer
+                        type: string
+                type: object
+            dapr:
+                app-port: "4002"
+            image: source-sql-proxy
+        reactivator:
+            config_schema:
+                properties:
+                    connector:
+                        default: SQLServer
+                        type: string
+                type: object
+            dapr:
+                app-port: "80"
+            deprovisionHandler: true
+            image: source-debezium-reactivator
+tag: ""
+---
+kind: SourceProvider
+apiVersion: v1
+name: CosmosGremlin
+spec:
+    config_schema:
+        properties:
+            accountEndpoint:
+                type: string
+            container:
+                type: string
+            database:
+                type: string
+        required:
+            - accountEndpoint
+            - database
+            - container
+        type: object
+    services:
+        proxy:
+            dapr:
+                app-port: "4002"
+            image: source-gremlin-proxy
+        reactivator:
+            config_schema:
+                properties:
+                    partitionKey:
+                        type: string
+                required:
+                    - partitionKey
+                type: object
+            image: source-cosmosdb-reactivator
+tag: ""
+---
+kind: SourceProvider
+apiVersion: v1
+name: Dataverse
+spec:
+    config_schema:
+        properties:
+            clientId:
+                type: string
+            clientSecret:
+                type: string
+            endpoint:
+                type: string
+            entities:
+                type: string
+            maxInterval:
+                type: integer
+            tenantId:
+                type: string
+        required:
+            - endpoint
+            - entities
+        type: object
+    services:
+        proxy:
+            dapr:
+                app-port: "80"
+            image: source-dataverse-proxy
+        reactivator:
+            image: source-dataverse-reactivator
+tag: ""
+---
+kind: SourceProvider
+apiVersion: v1
+name: EventHub
+spec:
+    config_schema:
+        properties:
+            bootstrapWindow:
+                default: 0
+                type: integer
+            connectionString:
+                type: string
+            consumerGroup:
+                default: $Default
+                type: string
+            eventHubs:
+                type: array
+            host:
+                type: string
+        required:
+            - eventHubs
+        type: object
+    services:
+        proxy:
+            dapr:
+                app-port: "80"
+            image: source-eventhub-proxy
+        reactivator:
+            dapr:
+                app-port: "80"
+            deprovisionHandler: true
+            image: source-eventhub-reactivator
+tag: ""
+---
+kind: SourceProvider
+apiVersion: v1
+name: Kubernetes
+spec:
+    config_schema:
+        properties:
+            kubeConfig:
+                type: string
+        required:
+            - kubeConfig
+        type: object
+    services:
+        proxy:
+            dapr:
+                app-port: "80"
+            image: source-kubernetes-proxy
+        reactivator:
+            dapr:
+                app-port: "80"
+            deprovisionHandler: true
+            image: source-kubernetes-reactivator
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: Debug
+spec:
+    services:
+        reaction:
+            config_schema:
+                properties:
+                    portConfigKey:
+                        default: 8080
+                        type: number
+                type: object
+            endpoints:
+                gateway:
+                    setting: internal
+                    target: $portConfigKey
+            image: reaction-debug
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: Debezium
+spec:
+    config_schema:
+        properties:
+            brokers:
+                type: array
+            saslPassword:
+                type: string
+            saslUsername:
+                type: string
+            topic:
+                type: string
+        required:
+            - brokers
+            - topic
+        type: object
+    services:
+        reaction:
+            image: reaction-debezium
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: EventGrid
+spec:
+    config_schema:
+        properties:
+            eventGridKey:
+                type: string
+            eventGridSchema:
+                default: CloudEvents
+                enum:
+                    - CloudEvents
+                    - EventGrid
+                type: string
+            eventGridUri:
+                type: string
+            format:
+                default: packed
+                enum:
+                    - packed
+                    - unpacked
+                    - template
+                type: string
+        required:
+            - eventGridUri
+        type: object
+    services:
+        reaction:
+            image: reaction-eventgrid
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: EventBridge
+spec:
+    config_schema:
+        properties:
+            eventBusName:
+                default: default
+                type: string
+            format:
+                default: packed
+                enum:
+                    - packed
+                    - unpacked
+                    - template
+                type: string
+        type: object
+    services:
+        reaction:
+            image: reaction-eventbridge
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: Gremlin
+spec:
+    config_schema:
+        properties:
+            addedResultCommand:
+                type: string
+            deletedResultCommand:
+                type: string
+            gremlinHost:
+                type: string
+            gremlinPassword:
+                type: string
+            gremlinPort:
+                type: number
+            gremlinUsername:
+                type: string
+            updatedResultCommand:
+                type: string
+        required:
+            - gremlinHost
+            - gremlinPort
+        type: object
+    services:
+        reaction:
+            image: reaction-gremlin
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: Result
+spec:
+    config_schema:
+        properties:
+            QueryContainerId:
+                type: string
+        type: object
+    services:
+        reaction:
+            config_schema:
+                properties:
+                    result-portConfigKey:
+                        default: 8080
+                        type: number
+                type: object
+            dapr:
+                app-port: "8080"
+            endpoints:
+                gateway:
+                    setting: internal
+                    target: $result-portConfigKey
+            image: reaction-result
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: SignalR
+spec:
+    config_schema:
+        properties:
+            connectionString:
+                type: string
+        type: object
+    services:
+        reaction:
+            config_schema:
+                properties:
+                    signalr-portConfigKey:
+                        default: 8080
+                        type: number
+                type: object
+            endpoints:
+                gateway:
+                    setting: external
+                    target: $signalr-portConfigKey
+            image: reaction-signalr
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: StorageQueue
+spec:
+    config_schema:
+        properties:
+            endpoint:
+                type: string
+            format:
+                default: packed
+                enum:
+                    - packed
+                    - unpacked
+                    - template
+                type: string
+            queueName:
+                type: string
+        required:
+            - queueName
+        type: object
+    services:
+        reaction:
+            image: reaction-storage-queue
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: StoredProc
+spec:
+    config_schema:
+        properties:
+            addedResultCommand:
+                type: string
+            databaseClient:
+                type: string
+            databaseDbname:
+                type: string
+            databaseHostname:
+                type: string
+            databasePassword:
+                type: string
+            databasePort:
+                type: number
+            databaseSsl:
+                default: false
+                type: boolean
+            databaseUser:
+                type: string
+            deletedResultCommand:
+                type: string
+            updatedResultCommand:
+                type: string
+        required:
+            - databaseHostname
+            - databasePort
+            - databaseUser
+            - databaseDbname
+            - databaseClient
+            - databasePassword
+        type: object
+    services:
+        reaction:
+            image: reaction-storedproc
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: Dataverse
+spec:
+    config_schema:
+        properties:
+            clientId:
+                type: string
+            endpoint:
+                type: string
+            secret:
+                type: string
+        required:
+            - endpoint
+            - clientId
+            - secret
+        type: object
+    services:
+        reaction:
+            image: reaction-dataverse
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: SyncDaprStateStore
+spec:
+    services:
+        reaction:
+            image: reaction-sync-dapr-statestore
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: PostDaprPubSub
+spec:
+    services:
+        reaction:
+            image: reaction-post-dapr-pubsub
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: Http
+spec:
+    config_schema:
+        properties:
+            baseUrl:
+                type: string
+            timeout:
+                type: number
+            token:
+                type: string
+        required:
+            - baseUrl
+        type: object
+    services:
+        reaction:
+            image: reaction-http
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: MCP
+spec:
+    services:
+        reaction:
+            config_schema:
+                properties:
+                    port:
+                        default: 3000
+                        type: number
+                type: object
+            endpoints:
+                gateway:
+                    setting: internal
+                    target: $port
+            image: reaction-mcp
+tag: ""
+---
+kind: ReactionProvider
+apiVersion: v1
+name: SyncVectorStore
+spec:
+    config_schema:
+        properties:
+            connectionString:
+                description: Connection string for the vector store (e.g., 'Endpoint=host:port;ApiKey=key' for Qdrant, 'Endpoint=https://...;ApiKey=key' for Azure AI Search)
+                type: string
+            distanceFunction:
+                default: CosineSimilarity
+                description: Distance function for vector similarity
+                enum:
+                    - CosineSimilarity
+                    - CosineDistance
+                    - EuclideanDistance
+                    - DotProductSimilarity
+                    - ManhattanDistance
+                type: string
+            embeddingApiKey:
+                description: API key for the embedding service
+                type: string
+            embeddingDimensions:
+                default: 3072
+                description: Number of dimensions for embedding vectors
+                maximum: 20000
+                minimum: 1
+                type: integer
+            embeddingEndpoint:
+                description: Endpoint URL for the embedding service
+                type: string
+            embeddingModel:
+                default: text-embedding-3-large
+                description: Model name/deployment name for embeddings
+                type: string
+            embeddingServiceType:
+                description: Type of embedding service to use
+                enum:
+                    - AzureOpenAI
+                type: string
+            indexKind:
+                default: Hnsw
+                description: Index type for vector search
+                enum:
+                    - Hnsw
+                    - Flat
+                    - IvfFlat
+                    - DiskAnn
+                type: string
+            isFilterable:
+                default: true
+                description: Enable filtering on data fields
+                type: boolean
+            isFullTextSearchable:
+                default: false
+                description: Enable full-text search on content fields (Azure AI Search only)
+                type: boolean
+            vectorStoreType:
+                description: Type of vector store to sync with (currently supported stores)
+                enum:
+                    - Qdrant
+                    - AzureAISearch
+                    - InMemory
+                type: string
+        required:
+            - vectorStoreType
+            - connectionString
+            - embeddingServiceType
+            - embeddingEndpoint
+            - embeddingApiKey
+            - embeddingModel
+        type: object
+    services:
+        reaction:
+            image: reaction-sync-vectorstore
+tag: ""

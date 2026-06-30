@@ -78,9 +78,9 @@ for comp in rg-pubsub-debug rg-pubsub-notifier rg-pubsub-dashboard; do
 done
 
 echo ""
-echo "=== Step 4: Create rg-state Dapr component (needed by source change-svc + reactivator) ==="
-# Default Drasi Redis lacks RedisJSON module, so the change-svc state query fails.
-# Switch to MongoDB which supports the Dapr state query API.
+echo "=== Step 4: Create rg-state + rg-pubsub Dapr components ==="
+# rg-state: change-svc needs state query API which requires RedisJSON on Redis.
+# Standard Redis doesn't have it. Switch to MongoDB.
 kubectl delete component rg-state -n drasi-system 2>/dev/null || true
 kubectl apply -n drasi-system -f - <<YAML
 apiVersion: dapr.io/v1alpha1
@@ -97,28 +97,58 @@ spec:
       value: Drasi
     - name: collectionName
       value: rg-state
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: rg-pubsub
+spec:
+  type: pubsub.redis
+  version: v1
+  metadata:
+    - name: redisHost
+      value: drasi-redis:6379
+    - name: redisPassword
+      value: ""
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: stepup-pubsub
+spec:
+  type: pubsub.redis
+  version: v1
+  metadata:
+    - name: redisHost
+      value: redis.default.svc.cluster.local:6379
+    - name: redisPassword
+      value: ""
 YAML
 
 echo ""
-echo "=== Step 5a: Fix query-host REDIS_BROKER (workers need it for change stream) ==="
-kubectl set env deployment/default-query-host -n drasi-system \
-  REDIS_BROKER="redis://10.0.126.12:6379"
-
-echo ""
-echo "=== Step 5b: Fix publish-api REDIS_BROKER (DNS resolution in distroless image) ==="
+echo "=== Step 5: Fix publish-api + query-host REDIS_BROKER (distroless DNS) ==="
 kubectl set env deployment/default-publish-api -n drasi-system \
+  REDIS_BROKER="redis://drasi-redis.drasi-system.svc.cluster.local:6379"
+kubectl set env deployment/default-query-host -n drasi-system \
   REDIS_BROKER="redis://drasi-redis.drasi-system.svc.cluster.local:6379"
 
 echo ""
-echo "=== Step 6: Fix source proxy (client=pg for knex) ==="
-kubectl set env deployment/stepup-proxy -n drasi-system client=pg
+echo "=== Step 6: Fix source proxy + reactivator env ==="
+PROXY_DEPLOY=$(kubectl get deploy -n drasi-system -l 'drasi/type=source,drasi/service=proxy' -o name 2>/dev/null | head -1)
+[ -n "$PROXY_DEPLOY" ] && kubectl set env "$PROXY_DEPLOY" -n drasi-system client=pg
+REACTIVATOR_DEPLOY=$(kubectl get deploy -n drasi-system -l 'drasi/type=source,drasi/service=reactivator' -o name 2>/dev/null | head -1)
+[ -n "$REACTIVATOR_DEPLOY" ] && kubectl set env "$REACTIVATOR_DEPLOY" -n drasi-system PUBSUB=rg-pubsub
 
 echo ""
-echo "=== Step 7: Register minimal SignalR provider (avoids actor config crash) ==="
-# The full SignalR provider definition from drasi init's manifest includes
-# endpoints and config_schema that trigger an actor configuration call on
-# the query-host, which crashes in main-branch builds. A minimal provider
-# (image only) registers cleanly.
+echo "=== Step 7: Fix reactivator Dapr config (client-only gRPC) ==="
+REACTIVATOR_DEPLOY=$(kubectl get deploy -n drasi-system -l 'drasi/type=source,drasi/service=reactivator' -o name 2>/dev/null | head -1)
+if [ -n "$REACTIVATOR_DEPLOY" ]; then
+  kubectl patch "$REACTIVATOR_DEPLOY" -n drasi-system --type json \
+    -p '[{"op":"add","path":"/spec/template/metadata/annotations/dapr.io~1app-protocol","value":"grpc"},{"op":"remove","path":"/spec/template/metadata/annotations/dapr.io~1app-port"}]' 2>/dev/null || true
+fi
+
+echo ""
+echo "=== Step 8: Register minimal SignalR provider ==="
 cat > /tmp/signalr-provider.yaml << 'EOF'
 kind: ReactionProvider
 apiVersion: v1
@@ -128,37 +158,18 @@ spec:
     reaction:
       image: reaction-signalr
 EOF
-kubectl delete reactionprovider SignalR -n drasi-system 2>/dev/null || true
+drasi delete reactionprovider SignalR -n drasi-system 2>/dev/null || true
 drasi apply -f /tmp/signalr-provider.yaml
 
 echo ""
-echo "=== Step 8: Fix reactivator Dapr config (gRPC protocol + no app-port) ==="
-# The reactivator is a gRPC client only — it doesn't serve HTTP or gRPC, so
-# app-port must be removed to prevent Dapr sidecar from waiting for it.
-kubectl patch deployment stepup-reactivator -n drasi-system --type json \
-  -p '[{"op":"add","path":"/spec/template/metadata/annotations/dapr.io~1app-protocol","value":"grpc"},{"op":"remove","path":"/spec/template/metadata/annotations/dapr.io~1app-port"}]'
+echo "=== Step 9: Restart affected deployments ==="
+kubectl rollout restart deployment -n drasi-system \
+  default-publish-api default-query-host 2>/dev/null || true
+kubectl rollout restart deployment -n drasi-system \
+  -l 'drasi/type=source' 2>/dev/null || true
 
 echo ""
-echo "=== Step 8: Restart affected pods ==="
-kubectl rollout restart deployment \
-  -n drasi-system \
-  default-publish-api \
-  stepup-proxy \
-  stepup-reactivator \
-  stepup-change-svc \
-  stepup-change-dispatcher \
-  stepup-query-api
-
-echo ""
-echo "=== Step 9: Expose dashboard via LoadBalancer ==="
-kubectl patch svc dashboard -n default-stepup -p '{"spec":{"type":"LoadBalancer"}}' 2>/dev/null || true
-
-echo ""
-echo "=== Step 10: Apply dashboard reaction (SignalR) ==="
-drasi apply -f drasi/dashboard-reaction.yaml 2>/dev/null || true
-
-echo ""
-echo "=== Step 11: Wait for pods to stabilise ==="
+echo "=== Step 10: Wait for pods to stabilise ==="
 sleep 15
 kubectl wait --for=condition=ready pod -n drasi-system \
   -l drasi/infra=api --timeout=60s 2>/dev/null || true
@@ -166,8 +177,12 @@ kubectl wait --for=condition=ready pod -n drasi-system \
   -l app=drasi-resource-provider --timeout=60s 2>/dev/null || true
 
 echo ""
-echo "Done. Check progress with:"
-echo "  drasi list source"
-echo "  drasi list query"
-echo "  drasi list reaction"
-echo "  kubectl get pods -n drasi-system"
+echo "=== Step 11: Expose dashboard via LoadBalancer ==="
+kubectl patch svc dashboard -n default-stepup -p '{"spec":{"type":"LoadBalancer"}}' 2>/dev/null || true
+
+echo ""
+echo "Done. Next steps (run manually after source is available):"
+echo "  drasi apply -f drasi/source.yaml && drasi wait source stepup 120"
+echo "  drasi apply -f drasi/race-to-goal.yaml ... (all 5 queries)"
+echo "  drasi apply -f drasi/debug.yaml drasi/notifier-reaction.yaml drasi/dashboard-reaction.yaml"
+echo "  kubectl rollout restart deployment/notifier-reaction -n drasi-system"

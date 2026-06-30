@@ -1,0 +1,528 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: drasi-system
+  labels:
+    drasi.io/namespace: "true"
+---
+apiVersion: v1
+data:
+    ACR: ghcr.io
+    DAPR_SIDECAR: daprio/daprd:1.14.5
+    IMAGE_PULL_POLICY: IfNotPresent
+    IMAGE_VERSION_TAG: main
+kind: ConfigMap
+metadata:
+    name: drasi-config
+    namespace: drasi-system
+---
+# Dapr installation placeholder
+# Install Dapr using Helm with registry: docker.io/daprio
+# Version: 1.14.5
+# Command: helm install dapr dapr/dapr --version 1.14.5 --namespace dapr-system --create-namespace --set global.registry=docker.io/daprio --set dapr_operator.watchInterval=10s
+---
+apiVersion: scheduling.k8s.io/v1
+globalDefault: false
+kind: PriorityClass
+metadata:
+    labels:
+        app: drasi-mongo
+    name: drasi-infrastructure
+value: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: drasi-redis
+    namespace: drasi-system
+spec:
+    ports:
+        - name: redis
+          port: 6379
+          targetPort: 6379
+    selector:
+        app: drasi-redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+    labels:
+        app: drasi-redis
+    name: drasi-redis
+    namespace: drasi-system
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: drasi-redis
+    serviceName: drasi-redis
+    template:
+        metadata:
+            labels:
+                app: drasi-redis
+        spec:
+            containers:
+                - command:
+                    - redis-server
+                  image: ghcr.io/drasi-project/redis:7-alpine
+                  name: redis
+                  ports:
+                    - containerPort: 6379
+                      name: redis
+                  resources:
+                    limits:
+                        cpu: 500m
+                    requests:
+                        cpu: 250m
+                        memory: 512Mi
+                  volumeMounts:
+                    - mountPath: /data
+                      name: data
+    volumeClaimTemplates:
+        - metadata:
+            name: data
+          spec:
+            accessModes:
+                - ReadWriteOnce
+            resources:
+                requests:
+                    storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: drasi-mongo
+    namespace: drasi-system
+spec:
+    ports:
+        - name: mongo
+          port: 27017
+          targetPort: 27017
+    selector:
+        app: drasi-mongo
+---
+apiVersion: v1
+data:
+    rs-init.js: |
+        rs.initiate({
+          _id: "rs0",
+          members: [
+            { _id: 0, host: "drasi-mongo-0.drasi-mongo:27017" }
+          ]
+        })
+kind: ConfigMap
+metadata:
+    name: drasi-mongo-init
+    namespace: drasi-system
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+    labels:
+        app: drasi-mongo
+    name: drasi-mongo
+    namespace: drasi-system
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: drasi-mongo
+    serviceName: drasi-mongo
+    template:
+        metadata:
+            labels:
+                app: drasi-mongo
+        spec:
+            containers:
+                - args:
+                    - --dbpath
+                    - /data/db
+                    - --replSet
+                    - rs0
+                    - --bind_ip
+                    - 0.0.0.0
+                  image: ghcr.io/drasi-project/mongo:6
+                  name: mongo
+                  ports:
+                    - containerPort: 27017
+                      name: mongo
+                  resources:
+                    limits:
+                        cpu: 250m
+                    requests:
+                        cpu: 250m
+                        memory: 512Mi
+                  volumeMounts:
+                    - mountPath: /data/db
+                      name: data
+                    - mountPath: /docker-entrypoint-initdb.d
+                      name: init
+            hostAliases:
+                - hostnames:
+                    - drasi-mongo-0.drasi-mongo
+                  ip: 127.0.0.1
+            priorityClassName: drasi-infrastructure
+            volumes:
+                - configMap:
+                    name: drasi-mongo-init
+                  name: init
+    volumeClaimTemplates:
+        - metadata:
+            name: data
+          spec:
+            accessModes:
+                - ReadWriteOnce
+            resources:
+                requests:
+                    storage: 1Gi
+---
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+    name: dapr-config
+    namespace: drasi-system
+spec:
+    accessControl:
+        defaultAction: allow
+        trustDomain: public
+    tracing:
+        samplingRate: "1"
+        zipkin:
+            endpointAddress: http://otel-collector:9411/api/v2/spans
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+    name: drasi-state
+    namespace: drasi-system
+spec:
+    metadata:
+        - name: connectionString
+          value: mongodb://drasi-mongo:27017/?replicaSet=rs0
+        - name: actorStateStore
+          value: "true"
+    type: state.mongodb
+    version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+    name: drasi-pubsub
+    namespace: drasi-system
+spec:
+    metadata:
+        - name: redisHost
+          value: drasi-redis:6379
+        - name: concurrency
+          value: "1"
+        - name: queueDepth
+          value: "100000"
+        - name: consumerID
+          value: drasi
+        - name: redisPassword
+          value: ""
+    type: pubsub.redis
+    version: v1
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: drasi-resource-provider
+    namespace: drasi-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+    name: drasi-resource-provider-role
+    namespace: drasi-system
+rules:
+    - apiGroups:
+        - ""
+      resources:
+        - serviceaccounts
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - update
+        - watch
+    - apiGroups:
+        - ""
+      resources:
+        - configmaps
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - update
+        - watch
+    - apiGroups:
+        - ""
+      resources:
+        - persistentvolumeclaims
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - update
+        - watch
+    - apiGroups:
+        - ""
+      resources:
+        - pods
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - update
+        - watch
+    - apiGroups:
+        - ""
+      resources:
+        - services
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - update
+        - watch
+    - apiGroups:
+        - apps
+      resources:
+        - deployments
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+    - apiGroups:
+        - apps
+      resources:
+        - deployments/status
+      verbs:
+        - get
+    - apiGroups:
+        - dapr.io
+      resources:
+        - components
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - update
+        - watch
+    - apiGroups:
+        - networking.k8s.io
+      resources:
+        - ingresses
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - update
+        - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+    name: drasi-resource-provider-rolebinding
+    namespace: drasi-system
+roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: drasi-resource-provider-role
+subjects:
+    - kind: ServiceAccount
+      name: drasi-resource-provider
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    name: drasi-resource-provider-cluster-role
+rules:
+    - apiGroups:
+        - ""
+      resources:
+        - services
+      verbs:
+        - get
+        - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+    name: drasi-resource-provider-cluster-rolebinding
+roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: drasi-resource-provider-cluster-role
+subjects:
+    - kind: ServiceAccount
+      name: drasi-resource-provider
+      namespace: drasi-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    labels:
+        drasi/infra: resource-provider
+    name: drasi-resource-provider
+    namespace: drasi-system
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            drasi/infra: resource-provider
+    template:
+        metadata:
+            annotations:
+                dapr.io/app-id: resource-provider
+                dapr.io/app-port: "8080"
+                dapr.io/config: dapr-config
+                dapr.io/enabled: "true"
+                dapr.io/sidecar-image: daprio/daprd:1.14.5
+            labels:
+                drasi/infra: resource-provider
+        spec:
+            containers:
+                - env:
+                    - name: NAMESPACE
+                      valueFrom:
+                        fieldRef:
+                            fieldPath: metadata.namespace
+                    - name: ACR
+                      valueFrom:
+                        configMapKeyRef:
+                            key: ACR
+                            name: drasi-config
+                            optional: true
+                    - name: IMAGE_VERSION_TAG
+                      valueFrom:
+                        configMapKeyRef:
+                            key: IMAGE_VERSION_TAG
+                            name: drasi-config
+                            optional: true
+                    - name: IMAGE_PULL_POLICY
+                      valueFrom:
+                        configMapKeyRef:
+                            key: IMAGE_PULL_POLICY
+                            name: drasi-config
+                            optional: true
+                    - name: DAPR_CONFIG
+                      valueFrom:
+                        configMapKeyRef:
+                            key: DAPR_CONFIG
+                            name: drasi-config
+                            optional: true
+                    - name: DAPR_SIDECAR
+                      valueFrom:
+                        configMapKeyRef:
+                            key: DAPR_SIDECAR
+                            name: drasi-config
+                            optional: true
+                    - name: INGRESS_CLASS_NAME
+                      valueFrom:
+                        configMapKeyRef:
+                            key: INGRESS_CLASS_NAME
+                            name: drasi-config
+                            optional: true
+                    - name: INGRESS_LOAD_BALANCER_SERVICE
+                      valueFrom:
+                        configMapKeyRef:
+                            key: INGRESS_LOAD_BALANCER_SERVICE
+                            name: drasi-config
+                            optional: true
+                    - name: INGRESS_LOAD_BALANCER_NAMESPACE
+                      valueFrom:
+                        configMapKeyRef:
+                            key: INGRESS_LOAD_BALANCER_NAMESPACE
+                            name: drasi-config
+                            optional: true
+                    - name: INGRESS_ANNOTATIONS
+                      valueFrom:
+                        configMapKeyRef:
+                            key: INGRESS_ANNOTATIONS
+                            name: drasi-config
+                            optional: true
+                  image: ghcr.io/drasi-project/kubernetes-provider:main
+                  imagePullPolicy: Always
+                  name: kubernetes-provider
+                  resources:
+                    limits:
+                        cpu: 200m
+                    requests:
+                        cpu: 50m
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: FallbackToLogsOnError
+            priorityClassName: drasi-infrastructure
+            serviceAccountName: drasi-resource-provider
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    labels:
+        drasi/infra: api
+    name: drasi-api
+    namespace: drasi-system
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            drasi/infra: api
+    template:
+        metadata:
+            annotations:
+                dapr.io/app-id: api
+                dapr.io/app-port: "8080"
+                dapr.io/config: dapr-config
+                dapr.io/enabled: "true"
+                dapr.io/sidecar-image: daprio/daprd:1.14.5
+            labels:
+                drasi/infra: api
+        spec:
+            containers:
+                - env:
+                    - name: NAMESPACE
+                      valueFrom:
+                        fieldRef:
+                            fieldPath: metadata.namespace
+                    - name: MONGO_URI
+                      value: mongodb://drasi-mongo:27017
+                  image: ghcr.io/drasi-project/api:main
+                  imagePullPolicy: Always
+                  name: drasi-api
+                  ports:
+                    - containerPort: 8080
+                      name: api
+                  resources:
+                    limits:
+                        cpu: 200m
+                    requests:
+                        cpu: 50m
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: FallbackToLogsOnError
+            priorityClassName: drasi-infrastructure
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: drasi-api
+    namespace: drasi-system
+spec:
+    ports:
+        - name: api
+          port: 8080
+          targetPort: 8080
+    selector:
+        drasi/infra: api
+    type: ClusterIP
