@@ -100,7 +100,12 @@ spec:
 YAML
 
 echo ""
-echo "=== Step 5: Fix publish-api REDIS_BROKER (DNS resolution in distroless image) ==="
+echo "=== Step 5a: Fix query-host REDIS_BROKER (workers need it for change stream) ==="
+kubectl set env deployment/default-query-host -n drasi-system \
+  REDIS_BROKER="redis://10.0.126.12:6379"
+
+echo ""
+echo "=== Step 5b: Fix publish-api REDIS_BROKER (DNS resolution in distroless image) ==="
 kubectl set env deployment/default-publish-api -n drasi-system \
   REDIS_BROKER="redis://drasi-redis.drasi-system.svc.cluster.local:6379"
 
