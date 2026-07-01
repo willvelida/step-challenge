@@ -1,0 +1,80 @@
+name: Bug report
+description: Report something in StepUp that isn't working as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please search existing issues first, and include
+        enough detail for someone to reproduce what you saw.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How can someone reproduce it? Include the commands or workflow you ran.
+      placeholder: |
+        1. Run `./scripts/aks-up.sh`
+        2. ...
+        3. See the error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      description: Paste any error output, `rad deploy` failure, or `kubectl` logs. Rendered as code, so no backticks needed.
+      render: shell
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the app does this touch?
+      options:
+        - Simulator
+        - Clock
+        - Notifier
+        - Dashboard
+        - Drasi (queries/reactions)
+        - Infrastructure (Bicep/Radius)
+        - CI/CD
+        - Docs
+        - Not sure
+    validations:
+      required: false
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it happen?
+      description: Which environment were you running?
+      options:
+        - Local kind cluster (cluster-up.sh)
+        - Azure AKS (aks-up.sh)
+        - GitHub Actions Deploy workflow
+        - Local service dev (db-up.sh + dotnet run)
+        - Not sure
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else — versions, screenshots, related issues, or a possible fix.
+    validations:
+      required: false

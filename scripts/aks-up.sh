@@ -129,7 +129,6 @@ cat <<DONE
 StepUp is up on AKS ($AKS).
   Pods:       kubectl get pods -n default-stepup
   Dashboard:  kubectl port-forward -n default-stepup deploy/dashboard 9091:80
-              drasi tunnel reaction dashboard 8080      # in another shell
               then open http://localhost:9091
   STOP BILLING when done:  ./scripts/aks-down.sh
 DONE

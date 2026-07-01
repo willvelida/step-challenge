@@ -106,7 +106,6 @@ StepUp is up on the '$CLUSTER' cluster (deployed via Radius).
 
   Pods:       kubectl get pods -n default-stepup
   Dashboard:  kubectl port-forward -n default-stepup deploy/dashboard 9090:80
-              drasi tunnel reaction dashboard 8080      # in another shell
               then open http://localhost:9090
   Reactions take ~1 min to go Available: drasi list reaction
   Tear down:  kind delete cluster --name $CLUSTER
