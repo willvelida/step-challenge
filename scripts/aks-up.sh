@@ -91,10 +91,26 @@ kubectl wait --for=condition=ready pod -l app=postgres -n default --timeout=180s
 for d in simulator clock notifier; do kubectl rollout restart "deploy/$d" -n default-stepup; done
 for d in simulator clock notifier; do kubectl rollout status  "deploy/$d" -n default-stepup --timeout=180s; done
 
-# --- 8. Drasi: source -> queries -> reactions -------------------------------
+# --- 8. Drasi: phased workarounds around source -> queries -> reactions -----
+# drasi init above installs the control plane. Due to a pre-1.0 image tag
+# mismatch (the platform release tag doesn't match GHCR image tags), several
+# runtime fixes are needed. Those fixes must interleave with `drasi apply`
+# because the resource provider only creates the source/reaction workers when
+# those objects are applied — so the workaround script runs in three phases.
+echo "Applying Drasi pre-apply workarounds..."
+ACR="$ACR.azurecr.io" bash scripts/drasi-workarounds.sh pre
+
 echo "Applying Drasi source..."
 drasi apply -f drasi/source.yaml
-drasi wait  -f drasi/source.yaml -t 180
+
+# Patch the source workers BEFORE waiting: the reactivator's app-port deadlock
+# otherwise keeps the source from ever reaching AVAILABLE.
+echo "Patching Drasi source workers..."
+ACR="$ACR.azurecr.io" bash scripts/drasi-workarounds.sh source
+
+echo "Waiting for source to become available..."
+drasi wait -f drasi/source.yaml -t 180
+
 echo "Applying Drasi queries..."
 for q in behind-pace collective-progress daily-smashed new-leader race-to-goal; do
   drasi apply -f "drasi/$q.yaml"
@@ -103,6 +119,10 @@ echo "Applying Drasi reactions..."
 for r in debug notifier-reaction dashboard-reaction; do
   drasi apply -f "drasi/$r.yaml"
 done
+
+# Fix the reaction pubsub components now that the reactions have created them.
+echo "Patching Drasi reaction workers..."
+ACR="$ACR.azurecr.io" bash scripts/drasi-workarounds.sh reactions
 
 cat <<DONE
 

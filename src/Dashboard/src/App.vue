@@ -1,7 +1,7 @@
 <script setup>
 import { ResultSet } from '@drasi/signalr-vue';
 import { ref, computed, onMounted } from 'vue';
-const hubUrl = 'http://localhost:8080/hub';
+const hubUrl = '/hub';
 const participants = ref(8);
 const status = ref('idle');
 const collectiveTarget = computed(() => participants.value * 300_000);
