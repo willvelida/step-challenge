@@ -111,12 +111,12 @@ reactions. Tear it down with:
 
 ```bash
 kubectl port-forward -n default-stepup deploy/dashboard 9091:80
-drasi tunnel reaction dashboard 8080      # in a second terminal
 ```
 
-Open <http://localhost:9091>, choose a participant count, and **Start a contest**. Steps tick
-in every few seconds and the simulated day advances every minute, so a full 30-day challenge
-plays out in about half an hour.
+Open <http://localhost:9091>, choose a participant count, and **Start a contest**. The dashboard's
+nginx proxies the SignalR hub (`/hub`) to the Drasi reaction inside the cluster, so no separate
+tunnel is needed. Steps tick in every few seconds and the simulated day advances every minute, so
+a full 30-day challenge plays out in about half an hour.
 
 ### Just the database (service development)
 
@@ -176,6 +176,11 @@ Or run the pieces by hand:
 2. Build and push each service image: `az acr build -r <acr> -t <service>:<tag> --platform linux/amd64 src/<Service>`
 3. Deploy the app: `rad deploy infra/app.bicep --parameters imageRegistry=<acr>.azurecr.io --parameters imageTag=<tag>`
 4. Apply Drasi: `drasi apply -f drasi/source.yaml`, then the queries and reactions in `drasi/`
+
+> On AKS a pre-1.0 Drasi image-tag mismatch means the source and reactions need runtime fixups from
+> `scripts/drasi-workarounds.sh`, interleaved with the `drasi apply` steps (`pre` → source →
+> `source` → `drasi wait` → queries → reactions → `reactions`). `aks-up.sh` performs this ordering
+> for you, so prefer it over running step 4 by hand.
 
 ### Configuration the workflows read
 

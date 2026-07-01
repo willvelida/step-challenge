@@ -35,7 +35,7 @@ with a type:
 | `drasi/` | the Drasi source, continuous queries, and reactions |
 | `components/`, `k8s/` | Dapr components and shared Kubernetes manifests (Redis) |
 | `data/` | database schema and seed SQL |
-| `scripts/` | local (`cluster-*`, `db-*`) and Azure (`aks-*`, `setup-oidc`) lifecycle scripts |
+| `scripts/` | local (`cluster-*`, `db-*`) and Azure (`aks-*`, `setup-oidc`, `drasi-workarounds`) lifecycle scripts |
 | `docs/` | architecture notes and per-feature implementation plans |
 | `.github/workflows/` | the CI and Deploy pipelines |
 

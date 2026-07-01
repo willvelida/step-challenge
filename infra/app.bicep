@@ -383,8 +383,9 @@ resource clockCron 'dapr.io/Component@v1alpha1' = {
 
 // ---------------------------------------------------------------------------
 // Dashboard: static Vue app (nginx). No Dapr sidecar — it's a browser client
-// that connects to the Drasi SignalR reaction hub (hubUrl baked to
-// http://localhost:8080/hub, reached via `drasi tunnel reaction dashboard 8080`).
+// that connects to the Drasi SignalR reaction hub via a relative `/hub` URL;
+// nginx reverse-proxies /hub to dashboard-reaction-svc.drasi-system.svc.cluster.local:8080,
+// so the browser reaches the hub through the dashboard (no `drasi tunnel` needed).
 // ---------------------------------------------------------------------------
 resource dashboard 'Applications.Core/containers@2023-10-01-preview' = {
   name: 'dashboard'
