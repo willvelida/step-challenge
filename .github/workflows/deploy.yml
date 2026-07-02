@@ -88,6 +88,7 @@ jobs:
           drasi env kube
           kubectl get namespace drasi-system >/dev/null 2>&1 || drasi init
           rad install kubernetes
+          AZ_SUB="${{ vars.AZURE_SUBSCRIPTION_ID }}" AZ_RG="$RG" bash scripts/radius-recipes.sh
 
       - name: Shared Redis + pub/sub
         run: |

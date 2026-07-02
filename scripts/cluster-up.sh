@@ -48,10 +48,9 @@ else
   echo "Installing Radius..."
   rad install kubernetes
 fi
-if ! rad env show default >/dev/null 2>&1; then
-  echo "No Radius environment 'default'. Run 'rad init' once, then re-run this script." >&2
-  exit 1
-fi
+
+echo "Configuring Radius environment + recipes..."
+bash scripts/radius-recipes.sh
 
 # --- 4. Shared Redis + the drasi-system pub/sub component --------------------
 echo "Deploying shared Redis + Dapr pub/sub component..."

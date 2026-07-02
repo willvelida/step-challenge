@@ -63,8 +63,9 @@ else
   echo "Installing Radius..."
   rad install kubernetes
 fi
-rad env show default >/dev/null 2>&1 || {
-  echo "No Radius env 'default' on this cluster. Run 'rad init' once, then re-run." >&2; exit 1; }
+# Ensure the 'default' env + recipes, and point the Azure provider at stepup-rg.
+echo "Configuring Radius environment + recipes (Azure provider scope)..."
+AZ_SUB="$(az account show --query id -o tsv | tr -d '\r')" AZ_RG="$RG" bash scripts/radius-recipes.sh
 rad workspace show
 
 # --- 5. Shared Redis + the drasi-system pub/sub component --------------------
