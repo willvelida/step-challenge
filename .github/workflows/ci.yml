@@ -40,3 +40,68 @@ jobs:
         # restores the Radius extension types from the public registry; warnings
         # (BCP081 dapr.io, BCP036 targetPort) are expected and non-fatal
         run: az bicep build --file infra/app.bicep
+
+  smoke-deploy:
+    name: Smoke deploy app.bicep on kind
+    runs-on: ubuntu-latest
+    needs: lint-bicep            # don't spin up a cluster if the template doesn't compile
+    steps:
+      - uses: actions/checkout@v4
+
+      # ubuntu runners are cgroup v2, so kind's control plane starts cleanly.
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: stepup-ci
+          wait: 120s
+
+      - name: Install rad + dapr CLIs
+        run: |
+          wget -q "https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh" -O - | /bin/bash
+          wget -q "https://raw.githubusercontent.com/dapr/cli/master/install/install.sh" -O - | /bin/bash
+
+      - name: Install Dapr control plane (no Drasi)
+        run: dapr init -k --wait
+
+      - name: Install Radius + register the Redis recipe
+        run: |
+          rad install kubernetes
+          bash scripts/radius-recipes.sh   # no AZ_SUB/AZ_RG => local container recipe, no Azure scope
+
+      - name: Build + kind-load the four service images
+        run: |
+          for svc in Simulator Clock Notifier Dashboard; do
+            name=$(echo "$svc" | tr '[:upper:]' '[:lower:]')
+            docker build -t "stepup/$name:local" "src/$svc"
+            kind load docker-image "stepup/$name:local" --name stepup-ci
+          done
+
+      - name: Shared Redis + dummy webhook secret
+        run: |
+          kubectl apply -f k8s/redis.yaml
+          kubectl wait --for=condition=ready pod -l app=redis -n default --timeout=120s
+          kubectl create namespace default-stepup --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic notifier-webhook -n default-stepup \
+            --from-literal=url=https://example.invalid/webhook \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy app.bicep via Radius
+        run: rad deploy infra/app.bicep --group default --environment default
+
+      - name: Assert the app containers reach Ready
+        run: |
+          kubectl wait --for=condition=available deploy/postgres -n default --timeout=240s
+          # sidecars only load components present at startup; restart so this fresh
+          # deploy reliably picks up ticker / clock-cron / stepup-pubsub / discord
+          for d in simulator clock notifier; do kubectl rollout restart deploy/$d -n default-stepup; done
+          kubectl wait --for=condition=available --timeout=240s \
+            deploy/simulator deploy/clock deploy/notifier deploy/dashboard -n default-stepup
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl -n default-stepup describe pods
+          for d in simulator clock notifier dashboard; do
+            echo "== logs: $d =="; kubectl -n default-stepup logs deploy/$d --all-containers --tail=60 || true
+          done
