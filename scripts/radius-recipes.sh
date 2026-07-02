@@ -20,6 +20,14 @@ NS=default
 RECIPE_PREFIX="${RECIPE_PREFIX:-ghcr.io/radius-project/recipes/local-dev}"
 RECIPE_TAG="${RECIPE_TAG:-latest}"
 
+# 0. Pin a CLI workspace to the current cluster. An ephemeral CI runner has no
+#    ~/.rad/config.yaml, so rad otherwise falls back to a scope-less workspace and
+#    builds invalid UCP URLs — GET .../Applications.Core/environments/default returns
+#    "is invalid" (no resource-group segment), which fails rad recipe register.
+#    Pinning a workspace supplies the /planes/radius/local/resourcegroups/default
+#    scope. Local runs already have a workspace from `rad init`; --force is idempotent.
+rad workspace create kubernetes "$ENV" --group "$GROUP" --environment "$ENV" --force
+
 # 1. Ensure the Radius resource group + environment exist (idempotent).
 rad group show "$GROUP" >/dev/null 2>&1 || rad group create "$GROUP"
 rad env show "$ENV" --group "$GROUP" >/dev/null 2>&1 \
